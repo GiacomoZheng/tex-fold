@@ -2,6 +2,15 @@ import os
 import re
 from pathlib import Path
 
+import random
+import string
+
+def gen_random_title(length=8):
+    return ''.join(random.choices(string.ascii_letters + string.digits, k=length))
+
+def red(text):
+    return f"\033[31m{text}\033[0m"
+
 level_map = {
     # document is 0,
     "section": 1,
@@ -10,6 +19,7 @@ level_map = {
 }
 
 def add_to(data: dict, key: Path, line: str):
+    # print(f"pwd: {key}") # !
     if key in data:
         data[key].append(line)
     else:
@@ -26,7 +36,7 @@ def fold(tex_path):
         lines = f.readlines()
 
     # Separate preamble and document ending
-    section_re = re.compile(r"\\(?P<level>section|subsection|subsubsection)\{(?P<title>.*?)\}")
+    section_re = re.compile(r"\\(?P<level>section|subsection|subsubsection)\*?\{(?P<title>.*?)\}.*")
     end_re = re.compile(r"\\end\{document\}")
 
     main_lines = []
@@ -35,12 +45,15 @@ def fold(tex_path):
 
     level = 0
     for line in lines:
-        print(f"level: {level}") # !
-        print(f"pwd: {pwd}") # !
-        print(f"line: {line}") # !
+        # print("=========================================") # !
+        # print(f"line: {line}") # !
+        # print(f"level: {level}") # !
         match = section_re.match(line.strip())
         if match:
             title = re.sub(r"[^\w\-]", "_", match.group("title")).strip("_")
+            if title == "":
+                title = gen_random_title()
+            # print(f"match: {title}") # !
             new_level = level_map[match.group("level")]
             if new_level == 1:
                 main_lines.append(line)
@@ -50,18 +63,21 @@ def fold(tex_path):
                 level = new_level
                 continue
             if new_level == level + 1:
+                # from sec to subsec
                 add_to(lib_data, pwd, line)
-            elif new_level < level:
-                pwd = Path(*pwd.parts[:new_level - level])
-                lib_data[pwd].append(line)
+            elif new_level <= level:
+                # from subsec to sec or subsec
+                pwd = Path(*pwd.parts[:new_level - level - 1])
+                add_to(lib_data, pwd, line)
             else:
                 raise Exception("structure of latex is incorrect: e.g., subsubsec after sec")
 
             
-            lib_data[pwd].append(f"\\input{{{pwd.relative_to(lib_folder).as_posix()}/{title}/_.tex}}")
+            lib_data[pwd].append(f"\\input{{{pwd.relative_to(lib_folder).as_posix()}/{title}/_.tex}}\n")
             pwd = pwd / title
             pwd.mkdir(exist_ok=True)
             level = new_level
+            
         else:
             if end_re.match(line.strip()):
                 level = 0
@@ -79,7 +95,6 @@ def fold(tex_path):
 
     # Write each section chunk
     for path, file_lines in lib_data.items():
-        # print(f"path: {path}") # !
         with Path(path / "_.tex").open("w", encoding="utf-8") as f:
             f.writelines(file_lines)
 
