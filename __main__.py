@@ -112,7 +112,7 @@ def unfold(folder_path):
                 stripped = line.strip()
                 if stripped.startswith("\\input{") and stripped.endswith("}"):
                     rel_input = stripped[len("\\input{"):-1]
-                    input_path = (lib_path / rel_input).with_suffix(".tex")
+                    input_path = (folder_path / rel_input).with_suffix(".tex")
                     if input_path.exists():
                         output.extend(unfold_lib_file(input_path))
                     else:
